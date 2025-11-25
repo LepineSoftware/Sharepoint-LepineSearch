@@ -1,0 +1,21 @@
+{
+  "@microsoft/generator-sharepoint": {
+    "plusBeta": false,
+    "isCreatingSolution": true,
+    "nodeVersion": "18.20.5",
+    "sdksVersions": {
+      "@microsoft/microsoft-graph-client": "3.0.2",
+      "@microsoft/teams-js": "2.24.0"
+    },
+    "version": "1.20.0",
+    "libraryName": "lepine-search",
+    "libraryId": "f8982314-423a-4ed9-b835-405a64def15b",
+    "environment": "spo",
+    "packageManager": "npm",
+    "solutionName": "LepineSearch",
+    "solutionShortDescription": "LepineSearch description",
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false,
+    "componentType": "webpart"
+  }
+}
