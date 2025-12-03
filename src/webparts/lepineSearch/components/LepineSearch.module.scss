@@ -1,0 +1,43 @@
+@import "~@fluentui/react/dist/sass/References";
+
+.lepineSearch {
+  overflow: hidden;
+  padding: 1em;
+  color: "[theme:bodyText, default: #323130]";
+  background-color: "[theme:bodyBackground, default: #ffffff]";
+
+  .container {
+    max-width: 100%;
+    margin: 0 auto;
+  }
+
+  // Grid System
+  .searchGrid {
+    display: flex;
+    margin-top: 20px;
+    gap: 20px;
+
+    @media (max-width: 768px) {
+      flex-direction: column;
+    }
+  }
+
+  .filterColumn {
+    width: 280px;
+    flex-shrink: 0;
+    border-right: 1px solid "[theme:neutralLight, default: #eaeaea]";
+    padding-right: 20px;
+
+    @media (max-width: 768px) {
+      width: 100%;
+      border-right: none;
+      border-bottom: 1px solid "[theme:neutralLight, default: #eaeaea]";
+      padding-bottom: 20px;
+    }
+  }
+
+  .resultsColumn {
+    flex-grow: 1;
+    min-width: 0; // Prevents flex child from overflowing
+  }
+}

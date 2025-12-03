@@ -1,0 +1,40 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/package-solution.schema.json",
+  "solution": {
+    "name": "lepine-search-client-side-solution",
+    "id": "2b9669ae-d355-4c38-9857-bb2a765d46e0",
+    "version": "1.0.0.0",
+    "includeClientSideAssets": true,
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false,
+    "developer": {
+      "name": "",
+      "websiteUrl": "",
+      "privacyUrl": "",
+      "termsOfUseUrl": "",
+      "mpnId": "Undefined-1.20.0"
+    },
+    "metadata": {
+      "shortDescription": {
+        "default": "LepineSearch description"
+      },
+      "longDescription": {
+        "default": "LepineSearch description"
+      },
+      "screenshotPaths": [],
+      "videoUrl": "",
+      "categories": []
+    },
+    "features": [
+      {
+        "title": "lepine-search Feature",
+        "description": "The feature that activates elements of the lepine-search solution.",
+        "id": "e04d053c-1903-4d3f-9e9e-6e20ed3eee1c",
+        "version": "1.0.0.0"
+      }
+    ]
+  },
+  "paths": {
+    "zippedPackage": "solution/lepine-search.sppkg"
+  }
+}
