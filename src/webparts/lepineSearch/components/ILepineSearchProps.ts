@@ -8,9 +8,8 @@ export interface ILepineSearchProps {
   hasTeamsContext: boolean;
   userDisplayName: string;
   
-  // Add these required fields:
   context: WebPartContext;
-  selectedSiteUrl: string;
+  // We only need the library IDs (which now contain the site info)
   selectedLibraryIds: string[];
   presets: ILepineSearchPreset[];
 }

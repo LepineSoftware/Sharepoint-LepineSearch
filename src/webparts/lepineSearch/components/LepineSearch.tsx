@@ -70,6 +70,7 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
   }
 
   public async componentDidUpdate(prevProps: ILepineSearchProps) {
+    // Only reload if library selections change
     if (prevProps.selectedLibraryIds !== this.props.selectedLibraryIds) {
       await this._loadData();
     }
@@ -78,12 +79,14 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
   private _loadData = async () => {
     this.setState({ isLoading: true });
     
-    if(!this.props.selectedSiteUrl || !this.props.selectedLibraryIds) {
-        this.setState({ isLoading: false });
+    // Check if we have library IDs
+    if(!this.props.selectedLibraryIds || this.props.selectedLibraryIds.length === 0) {
+        this.setState({ isLoading: false, allItems: [], filteredItems: [] });
         return;
     }
 
-    const items = await this._spService.getFilesFromLibraries(this.props.selectedSiteUrl, this.props.selectedLibraryIds);
+    // Pass the keys directly (they now contain the Site URL info)
+    const items = await this._spService.getFilesFromLibraries(this.props.selectedLibraryIds);
     
     const allTags = items.reduce<string[]>((acc, item) => acc.concat(item.tags || []), []);
     const uniqueTags = Array.from(new Set(allTags)).sort();
@@ -268,8 +271,8 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
                 )}
 
                 {showEmptyState ? (
-                    <Stack horizontalAlign="center" tokens={{ childrenGap: 20 }} styles={{ root: { marginTop: 40, paddingBottom: 40 } }}>
-                        <Icon iconName="SearchIssue" styles={{ root: { fontSize: 48, color: '#c8c8c8' } }} />
+                    <Stack horizontalAlign="center" tokens={{ childrenGap: 20 }} styles={{ root: { paddingBottom: 40 } }}>
+                        <Icon iconName="SearchIssue" styles={{ root: { fontSize: 48, color: '#c8c8c8', marginTop: 100 } }} />
                         <Text variant="large" styles={{ root: { color: '#666' } }}>
                             There are no results for this file kind
                         </Text>

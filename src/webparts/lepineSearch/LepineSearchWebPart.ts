@@ -18,7 +18,7 @@ import { SharePointService } from './services/SharePointService';
 import { ILepineSearchPreset } from './models/ISearchResult';
 
 export interface ILepineSearchWebPartProps {
-  selectedSiteUrls: string[]; // Multi-select returns an array
+  selectedSiteUrls: string[]; 
   selectedLibraryIds: string[];
   presets: ILepineSearchPreset[];
 }
@@ -34,16 +34,12 @@ export default class LepineSearchWebPart extends BaseClientSideWebPart<ILepineSe
       LepineSearch,
       {
         description: this.properties.presets ? "Search Configured" : "Please configure",
-        isDarkTheme: !!this.context.sdks.microsoftTeams, // basic check
+        isDarkTheme: !!this.context.sdks.microsoftTeams, 
         environmentMessage: "",
         hasTeamsContext: !!this.context.sdks.microsoftTeams,
         userDisplayName: this.context.pageContext.user.displayName,
         context: this.context,
-        // The component expects a single URL string for now, but our property pane allows multi. 
-        // We take the first selected site.
-        selectedSiteUrl: (this.properties.selectedSiteUrls && this.properties.selectedSiteUrls.length > 0) 
-            ? this.properties.selectedSiteUrls[0] 
-            : '',
+        // We now pass ONLY the composite keys. The component doesn't need the site URL explicitly anymore.
         selectedLibraryIds: this.properties.selectedLibraryIds || [],
         presets: this.properties.presets || []
       }
@@ -60,41 +56,66 @@ export default class LepineSearchWebPart extends BaseClientSideWebPart<ILepineSe
 
   protected async onInit(): Promise<void> {
     await super.onInit();
-    // Initialize our service with the WebPart Context
     this._service = new SharePointService(this.context);
     
-    // Load initial sites for the property pane dropdown
+    // 1. Load available sites
     try {
         const sites = await this._service.getAllSites();
         this._siteOptions = sites.map(s => ({ key: s.key, text: s.text }));
     } catch (e) {
         console.error("Error loading sites", e);
     }
+
+    // 2. Pre-load library options if sites are already selected (Handles page refresh)
+    if (this.properties.selectedSiteUrls && this.properties.selectedSiteUrls.length > 0) {
+       await this._loadLibrariesForSites(this.properties.selectedSiteUrls);
+    }
   }
 
-  // Handle Logic when Site selection changes to reload libraries
+  // Refactored helper to load libraries from MULTIPLE sites
+  private async _loadLibrariesForSites(siteUrls: string[]): Promise<void> {
+      this._libraryOptions = [];
+      const promises: Promise<any[]>[] = [];
+
+      // Create a promise for each selected site
+      siteUrls.forEach(url => {
+          promises.push(
+              this._service.getLibraries(url)
+                .then(libs => {
+                    // Find site title for display purposes (Optional, but nice UI)
+                    const siteTitle = this._siteOptions.find(opt => opt.key === url)?.text || "Site";
+                    
+                    // Map to Composite Key: "SiteURL::LibraryID"
+                    return libs.map(lib => ({
+                        key: `${url}::${lib.key}`,
+                        text: `${siteTitle} > ${lib.text}` 
+                    }));
+                })
+                .catch(err => {
+                    console.error(`Error loading libs for ${url}`, err);
+                    return [];
+                })
+          );
+      });
+
+      // Wait for all sites to respond
+      const results = await Promise.all(promises);
+      
+      // Flatten the results array
+      this._libraryOptions = results.reduce((acc, val) => acc.concat(val), []);
+      
+      // Refresh the pane to show new options
+      this.context.propertyPane.refresh();
+  }
+
   protected async onPropertyPaneFieldChanged(propertyPath: string, oldValue: any, newValue: any): Promise<void> {
     
-    if (propertyPath === 'selectedSiteUrls' && newValue) {
-      // If user selected sites, we load libraries for the FIRST selected site 
-      if(newValue.length > 0) {
-        const primarySite = newValue[0];
-        // Clear options to indicate loading/refresh
-        this._libraryOptions = [];
-        
-        try {
-            const libs = await this._service.getLibraries(primarySite);
-            this._libraryOptions = libs.map(l => ({ key: l.key, text: l.text }));
-            
-            // Clear previous library selections to avoid ID conflicts
-            this.properties.selectedLibraryIds = [];
-            
-            // Refresh the pane to show new options
-            this.context.propertyPane.refresh();
-        } catch (error) {
-            console.error("Error loading libraries", error);
-        }
-      }
+    if (propertyPath === 'selectedSiteUrls') {
+      // If sites change, reload libraries for ALL selected sites
+      await this._loadLibrariesForSites(newValue as string[] || []);
+      
+      // IMPORTANT: Removed the line that reset selectedLibraryIds
+      // This ensures previous selections persist if their key (Site::Lib) is still valid
     }
   }
 
@@ -115,19 +136,18 @@ export default class LepineSearchWebPart extends BaseClientSideWebPart<ILepineSe
             {
               groupName: "Data Sources",
               groupFields: [
-                // 1. Multi-Select for Sites
                 PropertyFieldMultiSelect('selectedSiteUrls', {
                   key: 'multiSelectSites',
                   label: "Select Sites",
                   options: this._siteOptions,
                   selectedKeys: this.properties.selectedSiteUrls
                 }),
-                // 2. Multi-Select for Libraries
                 PropertyFieldMultiSelect('selectedLibraryIds', {
                   key: 'multiSelectLibs',
                   label: "Select Document Libraries",
                   options: this._libraryOptions,
                   selectedKeys: this.properties.selectedLibraryIds,
+                  // Only disable if NO sites are selected
                   disabled: !this.properties.selectedSiteUrls || this.properties.selectedSiteUrls.length === 0
                 })
               ]
@@ -135,7 +155,6 @@ export default class LepineSearchWebPart extends BaseClientSideWebPart<ILepineSe
             {
               groupName: "Search Presets",
               groupFields: [
-                // 3. Collection Data for Presets (Allows user to add/remove presets)
                 PropertyFieldCollectionData('presets', {
                   key: 'collectionData',
                   label: 'Manage Search Presets',

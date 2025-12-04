@@ -33,94 +33,113 @@ export class SharePointService {
     }));
   }
 
-  // 2. Get Libraries
+  // 2. Get Libraries (Helper for a single site)
   public async getLibraries(siteUrl: string): Promise<{ key: string; text: string }[]> {
-    const web = Web(siteUrl).using(SPFx(this._context));
-    const libs = await web.lists.filter("(BaseTemplate eq 101 or BaseTemplate eq 109) and Hidden eq false")();
-    return libs.map((l: any) => ({ key: l.Id, text: l.Title }));
+    try {
+        const web = Web(siteUrl).using(SPFx(this._context));
+        const libs = await web.lists.filter("(BaseTemplate eq 101 or BaseTemplate eq 109) and Hidden eq false")();
+        return libs.map((l: any) => ({ key: l.Id, text: l.Title }));
+    } catch (e) {
+        console.error(`Failed to load libraries for ${siteUrl}`, e);
+        return [];
+    }
   }
 
-  // 3. Main Query: Reliable REST + Correct File GUID for Thumbnails
-  public async getFilesFromLibraries(siteUrl: string, libraryIds: string[]): Promise<ILepineSearchResult[]> {
-    const web = Web(siteUrl).using(SPFx(this._context)); 
+  // 3. Main Query: Accepts Composite Keys (SiteUrl::LibId)
+  public async getFilesFromLibraries(libraryKeys: string[]): Promise<ILepineSearchResult[]> {
     let allFiles: ILepineSearchResult[] = [];
 
     // Filter: No Folders (FSObjType eq 0) AND No ASPX pages
     const filterQuery = "FSObjType eq 0 and File_x0020_Type ne 'aspx'";
 
-    for (const libId of libraryIds) {
-      let items: any[] = [];
+    // Group keys by Site URL to minimize Web object creation
+    // Key Format: "https://site/url::LibraryGUID"
+    const libsBySite: Record<string, string[]> = {};
+
+    libraryKeys.forEach(key => {
+        // Handle potential legacy keys (just GUID) by ignoring them or handling gracefully
+        if (key.indexOf('::') === -1) return;
+
+        const [siteUrl, libId] = key.split('::');
+        if (!libsBySite[siteUrl]) libsBySite[siteUrl] = [];
+        libsBySite[siteUrl].push(libId);
+    });
+
+    // Iterate through each Site
+    for (const siteUrl in libsBySite) {
+      const libIds = libsBySite[siteUrl];
+      const web = Web(siteUrl).using(SPFx(this._context));
       
-      try {
-        const list = web.lists.getById(libId);
+      for (const libId of libIds) {
+        let items: any[] = [];
         
-        // STEP A: Get the "Drive ID". Required for the modern thumbnail API.
-        const listEntity: any = await list.select("Drive/Id").expand("Drive")();
-        const driveId = listEntity.Drive?.Id;
-
-        // STEP B: Get Items. 
-        // CRITICAL: We must Select and Expand "File/UniqueId" to get the correct ID for the Drive API.
         try {
-            items = await list.items
-                .filter(filterQuery)
-                .select("Id", "UniqueId", "FileLeafRef", "FileRef", "EncodedAbsUrl", "File_x0020_Type", "File/UniqueId", "TaxCatchAll/Term")
-                .expand("File", "TaxCatchAll")();
-        } catch (e) {
-            console.warn(`Library ${libId} metadata query failed. Retrying basic.`);
-            items = await list.items
-                .filter(filterQuery)
-                .select("Id", "UniqueId", "FileLeafRef", "FileRef", "EncodedAbsUrl", "File_x0020_Type", "File/UniqueId")
-                .expand("File")();
-        }
-
-        // STEP C: Map Results
-        const mapped: ILepineSearchResult[] = items.map((item: any) => {
-            let fileType = item.File_x0020_Type;
-            if (!fileType && item.FileLeafRef) {
-                const parts = item.FileLeafRef.split('.');
-                if (parts.length > 1) fileType = parts.pop();
-            }
-            fileType = (fileType || "").toLowerCase();
-
-            const absUrl = item.EncodedAbsUrl || `${siteUrl}${item.FileRef}`;
+            const list = web.lists.getById(libId);
             
-            // --- THUMBNAIL LOGIC ---
-            let thumbUrl = "";
-            const isVideo = ['mp4', 'mov', 'avi', 'wmv', 'mkv'].indexOf(fileType) > -1;
+            // STEP A: Get the "Drive ID"
+            const listEntity: any = await list.select("Drive/Id").expand("Drive")();
+            const driveId = listEntity.Drive?.Id;
 
-            // Use the FILE UniqueId (item.File.UniqueId), not the Item UniqueId
-            const fileGuid = item.File?.UniqueId; 
-
-            if (driveId && fileGuid && isVideo) {
-                // MODERN VIDEO THUMBNAIL (Drive API)
-                // "c400x99999" forces the modern generator to create a cover image
-                // We use the Drive ID + File GUID
-                thumbUrl = `${siteUrl}/_api/v2.1/drives/${driveId}/items/${fileGuid}/thumbnails/0/c400x99999/content?preferNoRedirect=true`;
-            } else {
-                // STANDARD IMAGE/DOC THUMBNAIL
-                thumbUrl = `${siteUrl}/_layouts/15/getpreview.ashx?path=${absUrl}`;
+            // STEP B: Get Items
+            try {
+                items = await list.items
+                    .filter(filterQuery)
+                    .select("Id", "UniqueId", "FileLeafRef", "FileRef", "EncodedAbsUrl", "File_x0020_Type", "File/UniqueId", "TaxCatchAll/Term")
+                    .expand("File", "TaxCatchAll")();
+            } catch (e) {
+                console.warn(`Library ${libId} metadata query failed. Retrying basic.`);
+                items = await list.items
+                    .filter(filterQuery)
+                    .select("Id", "UniqueId", "FileLeafRef", "FileRef", "EncodedAbsUrl", "File_x0020_Type", "File/UniqueId")
+                    .expand("File")();
             }
 
-            return {
-                id: item.Id.toString(),
-                name: item.FileLeafRef,
-                location: siteUrl, 
-                fileType: fileType,
-                href: absUrl,
-                thumbnailUrl: thumbUrl,
-                tags: (item.TaxCatchAll && item.TaxCatchAll.length > 0) 
-                    ? item.TaxCatchAll.map((t: any) => t.Term) 
-                    : [],
-                metadata: {},
-                parentLibraryId: libId,
-                parentSiteUrl: siteUrl
-            };
-        });
-        
-        allFiles = [...allFiles, ...mapped];
+            // STEP C: Map Results
+            const mapped: ILepineSearchResult[] = items.map((item: any) => {
+                let fileType = item.File_x0020_Type;
+                if (!fileType && item.FileLeafRef) {
+                    const parts = item.FileLeafRef.split('.');
+                    if (parts.length > 1) fileType = parts.pop();
+                }
+                fileType = (fileType || "").toLowerCase();
 
-      } catch (error) {
-        console.warn(`Library ${libId} query failed`, error);
+                const absUrl = item.EncodedAbsUrl || `${siteUrl}${item.FileRef}`;
+                const fileGuid = item.File?.UniqueId; 
+                
+                // --- THUMBNAIL LOGIC ---
+                let thumbUrl = "";
+                // Complex types that benefit from Drive API
+                const isComplexMedia = ['mp4', 'mov', 'avi', 'wmv', 'mkv', 'heic', 'heif', 'pptx', 'docx', 'xlsx', 'pdf'].indexOf(fileType) > -1;
+
+                if (driveId && fileGuid && isComplexMedia) {
+                    // STRATEGY 1: Modern Drive API
+                    thumbUrl = `${siteUrl}/_api/v2.1/drives/${driveId}/items/${fileGuid}/thumbnails/0/large/content`;
+                } else {
+                    // STRATEGY 2: Legacy Fallback
+                    thumbUrl = `${siteUrl}/_layouts/15/getpreview.ashx?path=${encodeURIComponent(absUrl)}&resolution=0`;
+                }
+
+                return {
+                    id: item.Id.toString(),
+                    name: item.FileLeafRef,
+                    location: siteUrl, 
+                    fileType: fileType,
+                    href: absUrl,
+                    thumbnailUrl: thumbUrl,
+                    tags: (item.TaxCatchAll && item.TaxCatchAll.length > 0) 
+                        ? item.TaxCatchAll.map((t: any) => t.Term) 
+                        : [],
+                    metadata: {},
+                    parentLibraryId: libId,
+                    parentSiteUrl: siteUrl
+                };
+            });
+            
+            allFiles = [...allFiles, ...mapped];
+
+        } catch (error) {
+            console.warn(`Library ${libId} query failed in site ${siteUrl}`, error);
+        }
       }
     }
     return allFiles;

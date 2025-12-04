@@ -78,20 +78,27 @@ export default class LepineSearchResultsContent extends React.Component<IContent
     if (e.key === 'ArrowLeft') this._onNavigate('prev');
   }
 
-  // --- HELPERS ---
+  // --- HELPERS (FIXED) ---
 
   private _getHighResPreviewUrl(item: ILepineSearchResult): string {
-    const fileType = (item.fileType || "").toLowerCase();
-    
-    // HEIC Fix
-    if (fileType === 'heic' || fileType === 'heif') {
-       return item.thumbnailUrl.replace('resolution=0', 'resolution=3');
+    const url = item.thumbnailUrl;
+
+    // Case 1: Modern Drive API - Upgrade 'large' to HD (1080p)
+    if (url.indexOf('/large/content') > -1) {
+        return url.replace('/large/content', '/c1920x1080/content');
     }
-    // Standard High Res Request
-    if (item.thumbnailUrl.indexOf('resolution=') > -1) {
-        return item.thumbnailUrl.replace('resolution=0', 'resolution=3');
+
+    // Case 2: Legacy getpreview.ashx - Upgrade resolution
+    if (url.indexOf('resolution=') > -1) {
+        return url.replace('resolution=0', 'resolution=3');
     }
-    return item.thumbnailUrl + (item.thumbnailUrl.indexOf('?') > -1 ? '&' : '?') + "resolution=3";
+
+    // Fallback: Append resolution if missing
+    if (url.indexOf('getpreview.ashx') > -1 && url.indexOf('resolution=') === -1) {
+        return url + (url.indexOf('?') > -1 ? '&' : '?') + "resolution=3";
+    }
+
+    return url;
   }
 
   private _columns: IColumn[] = [
@@ -134,7 +141,7 @@ export default class LepineSearchResultsContent extends React.Component<IContent
       return <Spinner size={SpinnerSize.large} label="Loading documents..." />;
     }
 
-    const pageSize = isCardView ? 16 : 25;
+    const pageSize = isCardView ? 12 : 25;
     const totalPages = Math.ceil(items.length / pageSize);
     const startIndex = (currentPage - 1) * pageSize;
     const currentItems = items.slice(startIndex, startIndex + pageSize);
@@ -143,8 +150,11 @@ export default class LepineSearchResultsContent extends React.Component<IContent
         position: 'relative',
         width: '100%',
         height: '130px',
-        backgroundColor: '#d1d1d1',
-        overflow: 'hidden'
+        backgroundColor: '#f3f2f1',
+        overflow: 'hidden',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center'
     };
 
     return (
@@ -182,27 +192,31 @@ export default class LepineSearchResultsContent extends React.Component<IContent
                         {isVideo ? (
                             // VIDEO CARD RENDER
                             <>
-                            <video
-                                src={item.href}
-                                poster={item.thumbnailUrl} 
-                                style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
-                                preload="metadata"
-                                muted
+                            {/* Use Image with thumbnail poster */}
+                            <Image
+                                src={item.thumbnailUrl} 
+                                imageFit={ImageFit.cover}
+                                width="100%"
+                                height={130}
+                                alt={`Preview of ${item.name}`}
                             />
                             <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: 'rgba(255,255,255,0.9)', pointerEvents: 'none', zIndex: 2 }}>
-                                <Icon iconName="Play" styles={{ root: { fontSize: 32 } }} />
+                                <Icon iconName="Play" styles={{ root: { fontSize: 32, filter: 'drop-shadow(0 0 4px rgba(0,0,0,0.5))' } }} />
                             </div>
                             </>
                         ) : (
-                            // STANDARD IMAGE RENDER (Includes PDFs using their generated thumbnail)
-                            <div style={{
-                                width: '100%',
-                                height: '100%',
-                                backgroundImage: `url('${item.thumbnailUrl}')`,
-                                backgroundSize: 'cover',
-                                backgroundPosition: 'center center',
-                                backgroundRepeat: 'no-repeat'
-                            }} />
+                            // STANDARD IMAGE RENDER
+                            <Image
+                                src={item.thumbnailUrl}
+                                imageFit={ImageFit.centerCover} 
+                                width="100%"
+                                height={130}
+                                alt={`Preview of ${item.name}`}
+                                onError={(ev) => {
+                                    // Fallback: hide broken image, effectively showing grey background
+                                    (ev.target as HTMLImageElement).style.visibility = 'hidden';
+                                }}
+                            />
                         )}
                     </div>
 
@@ -270,7 +284,7 @@ export default class LepineSearchResultsContent extends React.Component<IContent
                  />
 
                  <div style={{ 
-                      backgroundColor: '#d1d1d1', 
+                      backgroundColor: '#f3f2f1', 
                       display: 'flex', 
                       justifyContent: 'center', 
                       alignItems: 'center',
@@ -284,7 +298,7 @@ export default class LepineSearchResultsContent extends React.Component<IContent
                         <video 
                             controls 
                             autoPlay 
-                            poster={selectedItem.thumbnailUrl}
+                            poster={this._getHighResPreviewUrl(selectedItem)}
                             src={selectedItem.href}
                             style={{ maxWidth: '100%', maxHeight: '500px', outline: 'none' }}
                         />
