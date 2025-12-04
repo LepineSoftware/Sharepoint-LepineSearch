@@ -272,7 +272,7 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
 
                 {showEmptyState ? (
                     <Stack horizontalAlign="center" tokens={{ childrenGap: 20 }} styles={{ root: { paddingBottom: 40 } }}>
-                        <Icon iconName="SearchIssue" styles={{ root: { fontSize: 48, color: '#c8c8c8', marginTop: 100 } }} />
+                        <Icon iconName="SearchIssue" styles={{ root: { fontSize: 48, color: '#c8c8c8', marginTop: 25 } }} />
                         <Text variant="large" styles={{ root: { color: '#666' } }}>
                             There are no results for this file kind
                         </Text>
