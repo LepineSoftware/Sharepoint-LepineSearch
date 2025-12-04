@@ -85,13 +85,15 @@ export class SharePointService {
                 items = await list.items
                     .filter(filterQuery)
                     .select("Id", "UniqueId", "FileLeafRef", "FileRef", "EncodedAbsUrl", "File_x0020_Type", "File/UniqueId", "TaxCatchAll/Term")
-                    .expand("File", "TaxCatchAll")();
+                    .expand("File", "TaxCatchAll")
+                    .top(5000)(); // Increased limit from default 100
             } catch (e) {
                 console.warn(`Library ${libId} metadata query failed. Retrying basic.`);
                 items = await list.items
                     .filter(filterQuery)
                     .select("Id", "UniqueId", "FileLeafRef", "FileRef", "EncodedAbsUrl", "File_x0020_Type", "File/UniqueId")
-                    .expand("File")();
+                    .expand("File")
+                    .top(5000)(); // Increased limit from default 100
             }
 
             // STEP C: Map Results
