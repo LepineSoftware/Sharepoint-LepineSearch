@@ -6,6 +6,8 @@ import {
 } from '@microsoft/sp-property-pane';
 import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
 
+import { FluentProvider, webLightTheme } from '@fluentui/react-components';
+
 // PnP Controls
 import { PropertyFieldMultiSelect } from '@pnp/spfx-property-controls/lib/PropertyFieldMultiSelect';
 import { PropertyFieldCollectionData, CustomCollectionFieldType } from '@pnp/spfx-property-controls/lib/PropertyFieldCollectionData';
@@ -47,7 +49,13 @@ export default class LepineSearchWebPart extends BaseClientSideWebPart<ILepineSe
       }
     );
 
-    ReactDom.render(element, this.domElement);
+      const wrappedElement = React.createElement(
+        FluentProvider,
+        { theme: webLightTheme },
+        element
+      );
+
+    ReactDom.render(wrappedElement, this.domElement);
   }
 
   protected async onInit(): Promise<void> {

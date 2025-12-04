@@ -19,9 +19,17 @@ export default class LepineSearchResultsSearchBar extends React.Component<ISearc
         </Text>
         <SearchBox
           placeholder="Search by filename..."
+          
+          // 1. Handles hitting "Enter" or clicking the search icon
           onSearch={(newValue) => this.props.onSearch(newValue)}
+          
+          // 2. Handles clicking the "X" to clear
           onClear={() => this.props.onSearch('')}
+          
+          // 3. CRITICAL: Handles typing or deleting text (Live Filtering)
           onChange={(_, newValue) => this.props.onSearch(newValue || '')}
+          
+          // Controlled component: value comes from parent state
           value={this.props.currentValue}
           styles={searchBoxStyles}
         />

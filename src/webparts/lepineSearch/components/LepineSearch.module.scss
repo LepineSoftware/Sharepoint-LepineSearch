@@ -41,3 +41,14 @@
     min-width: 0; // Prevents flex child from overflowing
   }
 }
+
+// Modal Styling
+:global(.lepineSearchModalContainer) {
+  background-color: "[theme:white, default: #ffffff]";
+  border-radius: 8px;
+  box-shadow: 0 6.4px 14.4px 0 rgba(0, 0, 0, 0.132), 0 1.2px 3.6px 0 rgba(0, 0, 0, 0.108);
+
+  // Ensure it doesn't get too tall on small screens
+  max-height: 80vh;
+  overflow-y: auto;
+}
