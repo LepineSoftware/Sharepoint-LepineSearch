@@ -17,12 +17,11 @@ import {
   Shimmer, 
   ShimmerElementType, 
   ShimmerElementsGroup, 
-  Separator, // NEW
-  Label      // NEW
+  Separator, 
+  Label      
 } from '@fluentui/react';
 import { HighlightText } from './HighlightText';
 
-// --- NEW HELPER FUNCTIONS ---
 const formatBytes = (bytes?: number) => {
     if (!bytes || isNaN(bytes) || bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -37,7 +36,6 @@ const formatDate = (dateStr?: string) => {
         year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
     });
 };
-// ----------------------------
 
 export interface IContentProps {
   items: ILepineSearchResult[];
@@ -53,7 +51,7 @@ interface IContentState {
 
 const cancelIcon: IIconProps = { iconName: 'Cancel' };
 const openIcon: IIconProps = { iconName: 'OpenInNewWindow' };
-const downloadIcon: IIconProps = { iconName: 'Download' }; // NEW
+const downloadIcon: IIconProps = { iconName: 'Download' }; 
 const prevIcon: IIconProps = { iconName: 'ChevronLeft' };
 const nextIcon: IIconProps = { iconName: 'ChevronRight' };
 
@@ -129,11 +127,11 @@ export default class LepineSearchResultsContent extends React.Component<IContent
       )
     },
     {
-      key: 'size', name: 'Size', fieldName: 'fileSize', minWidth: 70, maxWidth: 90, // NEW COLUMN
+      key: 'size', name: 'Size', fieldName: 'fileSize', minWidth: 70, maxWidth: 90, 
       onRender: (item: ILepineSearchResult) => <span>{formatBytes(item.fileSize)}</span>
     },
     {
-      key: 'modified', name: 'Modified', fieldName: 'modified', minWidth: 120, maxWidth: 150, // NEW COLUMN
+      key: 'modified', name: 'Modified', fieldName: 'modified', minWidth: 120, maxWidth: 150, 
       onRender: (item: ILepineSearchResult) => <span>{new Date(item.modified || '').toLocaleDateString()}</span>
     },
     {
@@ -370,6 +368,25 @@ export default class LepineSearchResultsContent extends React.Component<IContent
                         <Text>{selectedItem.modifiedBy || 'Unknown'}</Text>
                     </div>
 
+                    {/* MOVED BUTTONS HERE */}
+                    <Stack tokens={{ childrenGap: 10 }} styles={{ root: { marginTop: 10 } }}>
+                        <PrimaryButton 
+                            text="Open in SharePoint" 
+                            iconProps={openIcon}
+                            href={selectedItem.href}
+                            target="_blank"
+                            styles={{ root: { width: '100%' } }}
+                        />
+                        <DefaultButton 
+                            text="Download" 
+                            iconProps={downloadIcon}
+                            href={selectedItem.href}
+                            download={selectedItem.name}
+                            target="_blank"
+                            styles={{ root: { width: '100%' } }}
+                        />
+                    </Stack>
+
                     <Separator />
 
                     <div>
@@ -389,25 +406,7 @@ export default class LepineSearchResultsContent extends React.Component<IContent
 
                     <Separator />
 
-                    <Stack tokens={{ childrenGap: 10 }} styles={{ root: { marginTop: 'auto' } }}>
-                        <PrimaryButton 
-                            text="Open in SharePoint" 
-                            iconProps={openIcon}
-                            href={selectedItem.href}
-                            target="_blank"
-                            styles={{ root: { width: '100%' } }}
-                        />
-                        <DefaultButton 
-                            text="Download" 
-                            iconProps={downloadIcon}
-                            href={selectedItem.href}
-                            download={selectedItem.name}
-                            target="_blank"
-                            styles={{ root: { width: '100%' } }}
-                        />
-                    </Stack>
-
-                    <Text variant="small" styles={{ root: { textAlign: 'center', marginTop: 10, color: '#999' } }}>
+                    <Text variant="small" styles={{ root: { textAlign: 'center', marginTop: 'auto', color: '#999' } }}>
                         Item {selectedIndex + 1} of {items.length}
                     </Text>
 

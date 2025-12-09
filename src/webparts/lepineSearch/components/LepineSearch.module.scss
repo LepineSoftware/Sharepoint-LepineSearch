@@ -42,13 +42,12 @@
   }
 }
 
-// Modal Styling
 :global(.lepineSearchModalContainer) {
   background-color: "[theme:white, default: #ffffff]";
-  border-radius: 8px;
-  box-shadow: 0 6.4px 14.4px 0 rgba(0, 0, 0, 0.132), 0 1.2px 3.6px 0 rgba(0, 0, 0, 0.108);
+  border-radius: 12px; // Rounded corners
+  overflow: hidden; // Clips the inner content (like the header/video) to the border radius
+  box-shadow: 0 25.6px 57.6px 0 rgba(0, 0, 0, 0.22), 0 4.8px 14.4px 0 rgba(0, 0, 0, 0.18);
 
   // Ensure it doesn't get too tall on small screens
   max-height: 80vh;
-  overflow-y: auto;
 }
