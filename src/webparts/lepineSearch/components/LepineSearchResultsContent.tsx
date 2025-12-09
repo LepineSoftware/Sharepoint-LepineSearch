@@ -9,14 +9,14 @@ import {
   Stack, 
   DefaultButton, 
   PrimaryButton, 
-  Text,
-  Modal,
-  IconButton,
-  Image,
-  IIconProps,
-  Shimmer,
-  ShimmerElementType,
-  ShimmerElementsGroup,
+  Text, 
+  Modal, 
+  IconButton, 
+  Image, 
+  IIconProps, 
+  Shimmer, 
+  ShimmerElementType, 
+  ShimmerElementsGroup, 
   Separator, // NEW
   Label      // NEW
 } from '@fluentui/react';
@@ -315,10 +315,9 @@ export default class LepineSearchResultsContent extends React.Component<IContent
                 
                 {/* Left: Preview Area */}
                 <Stack 
-                    grow 
                     verticalAlign="center" 
                     horizontalAlign="center" 
-                    styles={{ root: { backgroundColor: '#1b1a19', position: 'relative', overflow:'hidden' } }}
+                    styles={{ root: { width: '680px', backgroundColor: '#1b1a19', position: 'relative', overflow:'hidden' } }}
                 >
                     {/* Navigation Overlays */}
                     <div style={{ position: 'absolute', left: 10, zIndex: 10 }}>
@@ -334,14 +333,14 @@ export default class LepineSearchResultsContent extends React.Component<IContent
                             autoPlay 
                             poster={this._getHighResPreviewUrl(selectedItem)}
                             src={selectedItem.href}
-                            style={{ maxWidth: '100%', maxHeight: '100%', outline: 'none' }}
+                            style={{ width: '100%', height: '100%', objectFit: 'contain', outline: 'none' }}
                         />
                      ) : (
                         <Image 
                             src={this._getHighResPreviewUrl(selectedItem)} 
                             alt={`Preview of ${selectedItem.name}`}
                             imageFit={ImageFit.contain}
-                            styles={{ root: { width: '100%', height: '100%' }, image: { maxHeight: '100%', maxWidth: '100%' } }}
+                            styles={{ root: { width: '100%', height: '100%' } }}
                         />
                      )}
                 </Stack>
@@ -401,7 +400,8 @@ export default class LepineSearchResultsContent extends React.Component<IContent
                         <DefaultButton 
                             text="Download" 
                             iconProps={downloadIcon}
-                            href={`${selectedItem.href}?download=1`}
+                            href={selectedItem.href}
+                            download={selectedItem.name}
                             target="_blank"
                             styles={{ root: { width: '100%' } }}
                         />
