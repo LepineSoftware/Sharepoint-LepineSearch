@@ -19,6 +19,17 @@ export class SharePointService {
     this._sp = spfi().using(SPFx(context));
   }
 
+  // NEW: Method to manually clear the cache (session storage)
+  public clearCache(): void {
+    try {
+        // Clearing sessionStorage invalidates all PnP cached queries set with store: "session"
+        // This ensures fresh data when the context (e.g., selected sites) changes.
+        sessionStorage.clear();
+    } catch (e) {
+        console.warn("Failed to clear session storage cache", e);
+    }
+  }
+
   public async getAllSites(): Promise<{ key: string; text: string }[]> {
     const results = await this._sp.search({
       Querytext: "contentclass:STS_Site contentclass:STS_Web",

@@ -111,6 +111,9 @@ export default class LepineSearchWebPart extends BaseClientSideWebPart<ILepineSe
   protected async onPropertyPaneFieldChanged(propertyPath: string, oldValue: any, newValue: any): Promise<void> {
     
     if (propertyPath === 'selectedSiteUrls') {
+      // NEW: Clear cache to ensure fresh data for new site selection
+      this._service.clearCache();
+
       // If sites change, reload libraries for ALL selected sites
       await this._loadLibrariesForSites(newValue as string[] || []);
       
