@@ -82,8 +82,9 @@ export class SharePointService {
             
             list.items
                 .filter(filterQuery)
-                .select("Id", "UniqueId", "FileLeafRef", "FileRef", "EncodedAbsUrl", "File_x0020_Type", "File/UniqueId", "TaxCatchAll/Term")
-                .expand("File", "TaxCatchAll")
+                // FIX: Changed File_x0020_Size to File/Length
+                .select("Id", "UniqueId", "FileLeafRef", "FileRef", "EncodedAbsUrl", "File_x0020_Type", "File/UniqueId", "TaxCatchAll/Term", "Modified", "Editor/Title", "File/Length")
+                .expand("File", "TaxCatchAll", "Editor")
                 .top(5000)
                 .using(Caching({ store: "session" }))()
         ]);
@@ -130,6 +131,13 @@ export class SharePointService {
                 tags: (item.TaxCatchAll && item.TaxCatchAll.length > 0) 
                     ? item.TaxCatchAll.map((t: any) => t.Term) 
                     : [],
+                
+                // Mappings
+                modified: item.Modified,
+                modifiedBy: item.Editor?.Title,
+                // FIX: Use File.Length for size
+                fileSize: item.File?.Length ? parseInt(item.File.Length) : 0,
+                
                 metadata: {},
                 parentLibraryId: libId,
                 parentSiteUrl: siteUrl

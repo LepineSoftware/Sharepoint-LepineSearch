@@ -2,10 +2,8 @@ import * as React from 'react';
 import { ILepineSearchResult } from '../models/ISearchResult';
 import { ImageFit } from '@fluentui/react/lib/Image'; 
 import { DetailsList, DetailsListLayoutMode, SelectionMode, IColumn } from '@fluentui/react/lib/DetailsList';
-import { DocumentCard, DocumentCardTitle } from '@fluentui/react/lib/DocumentCard';
+import { DocumentCard } from '@fluentui/react/lib/DocumentCard';
 import { 
-  Spinner, 
-  SpinnerSize, 
   Link, 
   Icon, 
   Stack, 
@@ -15,13 +13,37 @@ import {
   Modal,
   IconButton,
   Image,
-  IIconProps
+  IIconProps,
+  Shimmer,
+  ShimmerElementType,
+  ShimmerElementsGroup,
+  Separator, // NEW
+  Label      // NEW
 } from '@fluentui/react';
+import { HighlightText } from './HighlightText';
+
+// --- NEW HELPER FUNCTIONS ---
+const formatBytes = (bytes?: number) => {
+    if (!bytes || isNaN(bytes) || bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
+const formatDate = (dateStr?: string) => {
+    if (!dateStr) return 'Unknown';
+    return new Date(dateStr).toLocaleDateString(undefined, {
+        year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+};
+// ----------------------------
 
 export interface IContentProps {
   items: ILepineSearchResult[];
   isLoading: boolean;
   isCardView: boolean;
+  searchQuery: string;
 }
 
 interface IContentState {
@@ -31,6 +53,7 @@ interface IContentState {
 
 const cancelIcon: IIconProps = { iconName: 'Cancel' };
 const openIcon: IIconProps = { iconName: 'OpenInNewWindow' };
+const downloadIcon: IIconProps = { iconName: 'Download' }; // NEW
 const prevIcon: IIconProps = { iconName: 'ChevronLeft' };
 const nextIcon: IIconProps = { iconName: 'ChevronRight' };
 
@@ -45,12 +68,12 @@ export default class LepineSearchResultsContent extends React.Component<IContent
   }
 
   public componentDidUpdate(prevProps: IContentProps) {
-    if (prevProps.items !== this.props.items || prevProps.isCardView !== this.props.isCardView) {
+    if (prevProps.items !== this.props.items || 
+        prevProps.isCardView !== this.props.isCardView || 
+        prevProps.searchQuery !== this.props.searchQuery) {
       this.setState({ currentPage: 1 });
     }
   }
-
-  // --- NAVIGATION LOGIC ---
 
   private _onItemClick = (item: ILepineSearchResult) => {
     this.setState({ selectedItem: item });
@@ -78,26 +101,17 @@ export default class LepineSearchResultsContent extends React.Component<IContent
     if (e.key === 'ArrowLeft') this._onNavigate('prev');
   }
 
-  // --- HELPERS (FIXED) ---
-
   private _getHighResPreviewUrl(item: ILepineSearchResult): string {
     const url = item.thumbnailUrl;
-
-    // Case 1: Modern Drive API - Upgrade 'large' to HD (1080p)
     if (url.indexOf('/large/content') > -1) {
         return url.replace('/large/content', '/c1920x1080/content');
     }
-
-    // Case 2: Legacy getpreview.ashx - Upgrade resolution
     if (url.indexOf('resolution=') > -1) {
         return url.replace('resolution=0', 'resolution=3');
     }
-
-    // Fallback: Append resolution if missing
     if (url.indexOf('getpreview.ashx') > -1 && url.indexOf('resolution=') === -1) {
         return url + (url.indexOf('?') > -1 ? '&' : '?') + "resolution=3";
     }
-
     return url;
   }
 
@@ -109,37 +123,68 @@ export default class LepineSearchResultsContent extends React.Component<IContent
     {
       key: 'name', name: 'Name', fieldName: 'name', minWidth: 150, maxWidth: 300, isResizable: true,
       onRender: (item: ILepineSearchResult) => (
-        <Link onClick={() => this._onItemClick(item)}>{item.name}</Link>
+        <Link onClick={() => this._onItemClick(item)}>
+           <HighlightText text={item.name} query={this.props.searchQuery} />
+        </Link>
       )
+    },
+    {
+      key: 'size', name: 'Size', fieldName: 'fileSize', minWidth: 70, maxWidth: 90, // NEW COLUMN
+      onRender: (item: ILepineSearchResult) => <span>{formatBytes(item.fileSize)}</span>
+    },
+    {
+      key: 'modified', name: 'Modified', fieldName: 'modified', minWidth: 120, maxWidth: 150, // NEW COLUMN
+      onRender: (item: ILepineSearchResult) => <span>{new Date(item.modified || '').toLocaleDateString()}</span>
     },
     {
       key: 'tags', name: 'Tags', fieldName: 'tags', minWidth: 100, maxWidth: 200,
       onRender: (item: ILepineSearchResult) => <span>{item.tags.join(', ')}</span>
-    },
-    {
-      key: 'fileType', name: 'File Type', fieldName: 'fileType', minWidth: 80, maxWidth: 100, isResizable: true,
-      onRender: (item: ILepineSearchResult) => <span>{item.fileType ? item.fileType.toUpperCase() : ''}</span>
     }
   ];
 
   public render() {
-    const { items, isLoading, isCardView } = this.props;
+    const { items, isLoading, isCardView, searchQuery } = this.props;
     const { currentPage, selectedItem } = this.state;
 
-    // --- TYPE CHECKERS ---
+    // SHIMMER LOADING
+    if (isLoading) {
+      if (isCardView) {
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px' }}>
+             {[1,2,3,4,5,6,7,8].map(i => (
+               <DocumentCard key={i} styles={{ root: { width: '100%', height: '180px' } }}>
+                  <div style={{ padding: 10 }}>
+                     <Shimmer customElementsGroup={
+                       <div style={{ display: 'flex', flexDirection: 'column' }}>
+                         <ShimmerElementsGroup shimmerElements={[{ type: ShimmerElementType.line, height: 120, width: '100%' }]} />
+                         <div style={{ height: 10 }} />
+                         <ShimmerElementsGroup shimmerElements={[{ type: ShimmerElementType.line, height: 16, width: '80%' }]} />
+                       </div>
+                     } />
+                  </div>
+               </DocumentCard>
+             ))}
+          </div>
+        );
+      } else {
+        return (
+          <Stack tokens={{ childrenGap: 20 }}>
+             {[1,2,3,4,5,6,7,8,9,10].map(i => (
+                <Shimmer key={i} />
+             ))}
+          </Stack>
+        );
+      }
+    }
+
     const isVideoFile = (fileType: string) => 
         ['mp4', 'mov', 'webm', 'ogg', 'mkv', 'avi'].indexOf((fileType || '').toLowerCase()) > -1;
 
-    // --- MODAL STATE HELPERS ---
     const isSelectedItemVideo = selectedItem ? isVideoFile(selectedItem.fileType) : false;
     
     const selectedIndex = selectedItem ? items.indexOf(selectedItem) : -1;
     const hasPrev = selectedIndex > 0;
     const hasNext = selectedIndex < items.length - 1;
-
-    if (isLoading) {
-      return <Spinner size={SpinnerSize.large} label="Loading documents..." />;
-    }
 
     const pageSize = isCardView ? 12 : 25;
     const totalPages = Math.ceil(items.length / pageSize);
@@ -160,7 +205,6 @@ export default class LepineSearchResultsContent extends React.Component<IContent
     return (
       <Stack tokens={{ childrenGap: 20 }}>
         
-        {/* VIEW AREA */}
         <div>
           {!isCardView ? (
             <DetailsList
@@ -187,12 +231,9 @@ export default class LepineSearchResultsContent extends React.Component<IContent
                     onClick={() => this._onItemClick(item)}
                     styles={{ root: { width: '100%', height: '100%', minWidth: 'auto', cursor: 'pointer' } }}
                   >
-                    {/* UNIFIED PREVIEW CONTAINER */}
                     <div style={previewContainerStyle}>
                         {isVideo ? (
-                            // VIDEO CARD RENDER
                             <>
-                            {/* Use Image with thumbnail poster */}
                             <Image
                                 src={item.thumbnailUrl} 
                                 imageFit={ImageFit.cover}
@@ -205,7 +246,6 @@ export default class LepineSearchResultsContent extends React.Component<IContent
                             </div>
                             </>
                         ) : (
-                            // STANDARD IMAGE RENDER
                             <Image
                                 src={item.thumbnailUrl}
                                 imageFit={ImageFit.centerCover} 
@@ -213,18 +253,15 @@ export default class LepineSearchResultsContent extends React.Component<IContent
                                 height={130}
                                 alt={`Preview of ${item.name}`}
                                 onError={(ev) => {
-                                    // Fallback: hide broken image, effectively showing grey background
                                     (ev.target as HTMLImageElement).style.visibility = 'hidden';
                                 }}
                             />
                         )}
                     </div>
 
-                    <DocumentCardTitle 
-                        title={item.name} 
-                        shouldTruncate={true}
-                        styles={{ root: { padding: '8px 12px', height: '38px', fontSize: '12px', lineHeight: '16px', fontWeight: 'normal', overflow: 'hidden' } }}
-                    />
+                    <div style={{ padding: '8px 12px', height: '38px', fontSize: '12px', lineHeight: '16px', overflow: 'hidden' }}>
+                       <HighlightText text={item.name} query={searchQuery} />
+                    </div>
                   </DocumentCard>
                 );
               })}
@@ -232,7 +269,6 @@ export default class LepineSearchResultsContent extends React.Component<IContent
           )}
         </div>
 
-        {/* PAGINATION */}
         {items.length > pageSize && (
           <Stack horizontal horizontalAlign="center" tokens={{ childrenGap: 20 }} styles={{ root: { marginTop: 20 } }}>
             <DefaultButton 
@@ -253,7 +289,7 @@ export default class LepineSearchResultsContent extends React.Component<IContent
           </Stack>
         )}
 
-        {/* ITEM PREVIEW MODAL */}
+        {/* --- ENHANCED PREVIEW MODAL --- */}
         <Modal
           isOpen={!!selectedItem}
           onDismiss={this._closeModal}
@@ -262,87 +298,120 @@ export default class LepineSearchResultsContent extends React.Component<IContent
         >
           {selectedItem && (
             <div 
-                style={{ padding: '20px', maxWidth: '850px', width: '90vw', outline: 'none' }}
+                style={{ padding: '0', width: '1000px', height: '80vh', display: 'flex', flexDirection: 'column', outline: 'none' }}
                 onKeyDown={this._onKeyDown}
                 tabIndex={0}
             >
-              
-              <Stack horizontal horizontalAlign="space-between" verticalAlign="start" styles={{ root: { marginBottom: 15 } }}>
-                <Text variant="xLarge" styles={{ root: { fontWeight: 600 } }}>{selectedItem.name}</Text>
+              {/* Header */}
+              <Stack horizontal horizontalAlign="space-between" verticalAlign="center" styles={{ root: { padding: '15px 20px', borderBottom: '1px solid #eee' } }}>
+                <Text variant="xLarge" styles={{ root: { fontWeight: 600, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' } }} title={selectedItem.name}>
+                    {selectedItem.name}
+                </Text>
                 <IconButton iconProps={cancelIcon} onClick={this._closeModal} ariaLabel="Close" />
               </Stack>
 
-              {/* MEDIA & NAVIGATION CONTAINER */}
-              <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 10 }} styles={{ root: { marginBottom: 20 } }}>
-                 
-                 <IconButton 
-                    iconProps={prevIcon} 
-                    disabled={!hasPrev} 
-                    onClick={() => this._onNavigate('prev')}
-                    styles={{ icon: { fontSize: 24, fontWeight: 'bold' } }}
-                    ariaLabel="Previous Item"
-                 />
+              {/* Body Split View */}
+              <Stack horizontal styles={{ root: { flexGrow: 1, overflow: 'hidden' } }}>
+                
+                {/* Left: Preview Area */}
+                <Stack 
+                    grow 
+                    verticalAlign="center" 
+                    horizontalAlign="center" 
+                    styles={{ root: { backgroundColor: '#1b1a19', position: 'relative', overflow:'hidden' } }}
+                >
+                    {/* Navigation Overlays */}
+                    <div style={{ position: 'absolute', left: 10, zIndex: 10 }}>
+                        <IconButton iconProps={prevIcon} disabled={!hasPrev} onClick={() => this._onNavigate('prev')} styles={{ root: { backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: '50%' } }} />
+                    </div>
+                    <div style={{ position: 'absolute', right: 10, zIndex: 10 }}>
+                         <IconButton iconProps={nextIcon} disabled={!hasNext} onClick={() => this._onNavigate('next')} styles={{ root: { backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: '50%' } }} />
+                    </div>
 
-                 <div style={{ 
-                      backgroundColor: '#f3f2f1', 
-                      display: 'flex', 
-                      justifyContent: 'center', 
-                      alignItems: 'center',
-                      minHeight: '300px',
-                      flexGrow: 1, 
-                      position: 'relative',
-                      borderRadius: '4px',
-                      overflow: 'hidden'
-                  }}>
-                     {isSelectedItemVideo ? (
+                    {isSelectedItemVideo ? (
                         <video 
                             controls 
                             autoPlay 
                             poster={this._getHighResPreviewUrl(selectedItem)}
                             src={selectedItem.href}
-                            style={{ maxWidth: '100%', maxHeight: '500px', outline: 'none' }}
+                            style={{ maxWidth: '100%', maxHeight: '100%', outline: 'none' }}
                         />
                      ) : (
                         <Image 
                             src={this._getHighResPreviewUrl(selectedItem)} 
                             alt={`Preview of ${selectedItem.name}`}
                             imageFit={ImageFit.contain}
-                            width={600}
-                            height={400}
-                            styles={{ root: { maxHeight: '500px' } }}
+                            styles={{ root: { width: '100%', height: '100%' }, image: { maxHeight: '100%', maxWidth: '100%' } }}
                         />
                      )}
-                  </div>
+                </Stack>
 
-                  <IconButton 
-                    iconProps={nextIcon} 
-                    disabled={!hasNext} 
-                    onClick={() => this._onNavigate('next')}
-                    styles={{ icon: { fontSize: 24, fontWeight: 'bold' } }}
-                    ariaLabel="Next Item"
-                 />
-              </Stack>
+                {/* Right: Details Panel */}
+                <Stack styles={{ root: { width: '320px', padding: '20px', borderLeft: '1px solid #eee', overflowY: 'auto', backgroundColor: '#fff' } }} tokens={{ childrenGap: 15 }}>
+                    
+                    <Text variant="large" styles={{ root: { fontWeight: 600, marginBottom: 10 } }}>File Details</Text>
+                    
+                    <div>
+                        <Label>Type</Label>
+                        <Text>{selectedItem.fileType ? selectedItem.fileType.toUpperCase() : 'Unknown'}</Text>
+                    </div>
 
-              <Stack tokens={{ childrenGap: 5 }} styles={{ root: { marginBottom: 20 } }}>
-                  <Text><strong>Type:</strong> {selectedItem.fileType ? selectedItem.fileType.toUpperCase() : 'Unknown'}</Text>
-                  
-                  <div style={{ height: '100px', overflowY: 'auto' }}>
-                    <Text>
-                        <strong>Tags:</strong> {selectedItem.tags && selectedItem.tags.length > 0 ? selectedItem.tags.join(', ') : 'None'}
+                    <div>
+                        <Label>Size</Label>
+                        <Text>{formatBytes(selectedItem.fileSize)}</Text>
+                    </div>
+
+                    <div>
+                        <Label>Modified</Label>
+                        <Text>{formatDate(selectedItem.modified)}</Text>
+                    </div>
+
+                    <div>
+                        <Label>Modified By</Label>
+                        <Text>{selectedItem.modifiedBy || 'Unknown'}</Text>
+                    </div>
+
+                    <Separator />
+
+                    <div>
+                        <Label>Tags</Label>
+                        {selectedItem.tags && selectedItem.tags.length > 0 ? (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                                {selectedItem.tags.map((tag, idx) => (
+                                    <span key={idx} style={{ background: '#f3f2f1', padding: '2px 8px', borderRadius: '4px', fontSize: '12px' }}>
+                                        {tag}
+                                    </span>
+                                ))}
+                            </div>
+                        ) : (
+                            <Text style={{ fontStyle: 'italic', color: '#666' }}>No tags available</Text>
+                        )}
+                    </div>
+
+                    <Separator />
+
+                    <Stack tokens={{ childrenGap: 10 }} styles={{ root: { marginTop: 'auto' } }}>
+                        <PrimaryButton 
+                            text="Open in SharePoint" 
+                            iconProps={openIcon}
+                            href={selectedItem.href}
+                            target="_blank"
+                            styles={{ root: { width: '100%' } }}
+                        />
+                        <DefaultButton 
+                            text="Download" 
+                            iconProps={downloadIcon}
+                            href={`${selectedItem.href}?download=1`}
+                            target="_blank"
+                            styles={{ root: { width: '100%' } }}
+                        />
+                    </Stack>
+
+                    <Text variant="small" styles={{ root: { textAlign: 'center', marginTop: 10, color: '#999' } }}>
+                        Item {selectedIndex + 1} of {items.length}
                     </Text>
-                  </div>
 
-                  <Text variant="small">Item {selectedIndex + 1} of {items.length}</Text>
-              </Stack>
-
-              <Stack horizontal tokens={{ childrenGap: 10 }} horizontalAlign="end">
-                  <DefaultButton text="Close" onClick={this._closeModal} />
-                  <PrimaryButton 
-                    text="Open in SharePoint" 
-                    iconProps={openIcon}
-                    href={selectedItem.href}
-                    target="_blank"
-                  />
+                </Stack>
               </Stack>
             </div>
           )}

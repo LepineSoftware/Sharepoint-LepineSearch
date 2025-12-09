@@ -6,6 +6,13 @@ export interface ILepineSearchResult {
   thumbnailUrl: string;
   href: string;
   tags: string[]; // Enterprise keywords / managed metadata
+  
+  // --- NEW FIELDS ---
+  modified?: string;
+  modifiedBy?: string;
+  fileSize?: number;
+  // ------------------
+
   metadata: Record<string, any>; // Flexible object for other columns
   parentLibraryId: string;
   parentSiteUrl: string;

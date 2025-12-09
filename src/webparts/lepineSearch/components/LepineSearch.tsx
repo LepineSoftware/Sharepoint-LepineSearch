@@ -9,7 +9,9 @@ import {
   IconButton,
   DefaultButton,
   IButtonStyles,
-  Icon
+  Icon,
+  Dropdown,
+  IDropdownOption
 } from '@fluentui/react';
 import { SharePointService } from '../services/SharePointService';
 import { ILepineSearchResult } from '../models/ISearchResult';
@@ -33,6 +35,7 @@ export interface ILepineSearchState {
   activeFileKind: string;
   isCardView: boolean;
   isFiltersOpen: boolean; 
+  sortOption: string; // NEW: State for sorting
 }
 
 const filterIcon: IIconProps = { iconName: 'Filter' };
@@ -45,6 +48,16 @@ const FILE_KINDS: Record<string, string[]> = {
     'PDF': ['pdf'],
     'Documents': ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'rtf', 'csv', 'one']
 };
+
+// NEW: Sort Options Definition
+const SORT_OPTIONS: IDropdownOption[] = [
+    { key: 'dateNew', text: 'Newest to Oldest' },
+    { key: 'dateOld', text: 'Oldest to Newest' },
+    { key: 'nameAsc', text: 'Name (A to Z)' },
+    { key: 'nameDesc', text: 'Name (Z to A)' },
+    { key: 'sizeLarge', text: 'Size (Largest)' },
+    { key: 'sizeSmall', text: 'Size (Smallest)' }
+];
 
 export default class LepineSearch extends React.Component<ILepineSearchProps, ILepineSearchState> {
   private _spService: SharePointService;
@@ -60,7 +73,8 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
       selectedFilters: [],
       activeFileKind: 'All', 
       isCardView: true,
-      isFiltersOpen: false
+      isFiltersOpen: false,
+      sortOption: 'dateNew' // Default sort
     };
     this._spService = new SharePointService(this.props.context);
   }
@@ -70,7 +84,6 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
   }
 
   public async componentDidUpdate(prevProps: ILepineSearchProps) {
-    // Only reload if library selections change
     if (prevProps.selectedLibraryIds !== this.props.selectedLibraryIds) {
       await this._loadData();
     }
@@ -79,13 +92,11 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
   private _loadData = async () => {
     this.setState({ isLoading: true });
     
-    // Check if we have library IDs
     if(!this.props.selectedLibraryIds || this.props.selectedLibraryIds.length === 0) {
         this.setState({ isLoading: false, allItems: [], filteredItems: [] });
         return;
     }
 
-    // Pass the keys directly (they now contain the Site URL info)
     const items = await this._spService.getFilesFromLibraries(this.props.selectedLibraryIds);
     
     const allTags = items.reduce<string[]>((acc, item) => acc.concat(item.tags || []), []);
@@ -97,10 +108,9 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
 
     this.setState({
       allItems: items,
-      filteredItems: items,
       availableFilters: groupedFilters,
       isLoading: false
-    });
+    }, this._applyFilters); // Apply initial sort/filter
   }
 
   private _handleSearch = (query: string) => {
@@ -124,11 +134,15 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
       this._handleFilterChange(newFilters);
   }
 
-  private _applyFilters = () => {
-    const { allItems, searchQuery, selectedFilters, activeFileKind } = this.state;
-    let result = allItems;
+  private _onSortChange = (event: React.FormEvent<HTMLDivElement>, item: IDropdownOption): void => {
+      this.setState({ sortOption: item.key as string }, this._applyFilters);
+  }
 
-    // 1. Search Query: Check Name OR Tags
+  private _applyFilters = () => {
+    const { allItems, searchQuery, selectedFilters, activeFileKind, sortOption } = this.state;
+    let result = [...allItems];
+
+    // 1. Search Query
     if (searchQuery) {
       const lowerQuery = searchQuery.toLowerCase();
       result = result.filter(i => 
@@ -153,16 +167,36 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
         }
     }
 
-    // 3. Explicit Tag Filters (Sidebar)
+    // 3. Explicit Tag Filters
     if (selectedFilters.length > 0) {
       result = result.filter(i => i.tags && i.tags.some(t => selectedFilters.includes(t)));
     }
+
+    // 4. Sorting Logic
+    result.sort((a, b) => {
+        switch (sortOption) {
+            case 'nameAsc':
+                return a.name.localeCompare(b.name);
+            case 'nameDesc':
+                return b.name.localeCompare(a.name);
+            case 'dateNew':
+                return (new Date(b.modified || 0).getTime()) - (new Date(a.modified || 0).getTime());
+            case 'dateOld':
+                return (new Date(a.modified || 0).getTime()) - (new Date(b.modified || 0).getTime());
+            case 'sizeLarge':
+                return (b.fileSize || 0) - (a.fileSize || 0);
+            case 'sizeSmall':
+                return (a.fileSize || 0) - (b.fileSize || 0);
+            default:
+                return 0;
+        }
+    });
 
     this.setState({ filteredItems: result });
   }
 
   public render(): React.ReactElement<ILepineSearchProps> {
-    const { isFiltersOpen, filteredItems, isCardView, selectedFilters, activeFileKind, isLoading } = this.state;
+    const { isFiltersOpen, filteredItems, isCardView, selectedFilters, activeFileKind, isLoading, sortOption } = this.state;
 
     const getKindBtnStyles = (kind: string): IButtonStyles => ({
         root: { 
@@ -216,6 +250,7 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
                     currentValue={this.state.searchQuery}
                 />
 
+                {/* File Kind Chips */}
                 <Stack horizontal wrap tokens={{ childrenGap: 10 }} styles={{ root: { width: '100%' } }}>
                     <DefaultButton text="All" onClick={() => this._handleKindChange('All')} styles={getKindBtnStyles('All')} />
                     <DefaultButton text="Photo" onClick={() => this._handleKindChange('Photo')} styles={getKindBtnStyles('Photo')} iconProps={{ iconName: 'Photo2' }} />
@@ -225,32 +260,37 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
                     <DefaultButton text="Other" onClick={() => this._handleKindChange('Other')} styles={getKindBtnStyles('Other')} />
                 </Stack>
 
+                {/* Controls Bar */}
                 <Stack horizontal horizontalAlign="space-between" verticalAlign="center" styles={{root: { borderBottom: '1px solid #eee', paddingBottom: 10, marginTop: 10}}}>
                     <Text variant="small" styles={{ root: { fontWeight: '600' } }}>
                         Found {filteredItems.length} results
                     </Text>
                     
-                    <Stack horizontal tokens={{ childrenGap: 20 }} verticalAlign="center">
-                        <ActionButton 
-                            iconProps={filterIcon} 
-                            allowDisabledFocus 
-                            onClick={() => this.setState({ isFiltersOpen: true })}
-                        >
-                            {selectedFilters.length > 0 
-                                ? `Filter Tags (${selectedFilters.length})`
-                                : "Filter Tags"}
-                        </ActionButton>
+                    <Stack horizontal tokens={{ childrenGap: 15 }} verticalAlign="center">
+                         <Dropdown
+                            selectedKey={sortOption}
+                            options={SORT_OPTIONS}
+                            onChange={this._onSortChange}
+                            styles={{ root: { width: 160 }, dropdown: { border: 'none' } }} // Minimalist style
+                        />
 
                         <Toggle 
-                            label="Card View" 
-                            inlineLabel 
-                            styles={{root: { marginBottom: 0 }}}
-                            checked={isCardView}
+                            onText="Card" 
+                            offText="List" 
+                            checked={isCardView} 
                             onChange={(ev, checked) => this.setState({ isCardView: !!checked })}
+                            styles={{ root: { marginBottom: 0 } }} 
+                        />
+                        
+                        <IconButton 
+                            iconProps={filterIcon} 
+                            onClick={() => this.setState({ isFiltersOpen: true })}
+                            title="Filter Tags"
                         />
                     </Stack>
                 </Stack>
 
+                {/* Active Filters Display */}
                 {selectedFilters.length > 0 && (
                     <Stack horizontal wrap tokens={{ childrenGap: 10 }}>
                         {selectedFilters.map(tag => (
@@ -270,7 +310,7 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
                     </Stack>
                 )}
 
-                {showEmptyState ? (
+              {showEmptyState ? (
                     <Stack horizontalAlign="center" tokens={{ childrenGap: 20 }} styles={{ root: { paddingBottom: 40 } }}>
                         <Icon iconName="SearchIssue" styles={{ root: { fontSize: 48, color: '#c8c8c8', marginTop: 25 } }} />
                         <Text variant="large" styles={{ root: { color: '#666' } }}>
@@ -281,7 +321,8 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
                     <LepineSearchResultsContent 
                         items={filteredItems} 
                         isLoading={this.state.isLoading}
-                        isCardView={isCardView} 
+                        isCardView={isCardView}
+                        searchQuery={this.state.searchQuery} // <--- NEW: Passed prop
                     />
                 )}
             </Stack>
