@@ -8,7 +8,11 @@ import "@pnp/sp/items";
 import "@pnp/sp/search";
 import "@pnp/sp/files";
 import "@pnp/sp/folders";
+// REMOVED: import "@pnp/sp/drives"; (This caused the build error)
 import { ILepineSearchResult } from "../models/ISearchResult";
+
+// CONFIGURATION: Add your specific Managed Metadata Column Internal Names here
+const TARGET_FIELDS = ['Department', 'Project', 'DocType']; 
 
 export class SharePointService {
   private _sp: SPFI;
@@ -19,11 +23,8 @@ export class SharePointService {
     this._sp = spfi().using(SPFx(context));
   }
 
-  // NEW: Method to manually clear the cache (session storage)
   public clearCache(): void {
     try {
-        // Clearing sessionStorage invalidates all PnP cached queries set with store: "session"
-        // This ensures fresh data when the context (e.g., selected sites) changes.
         sessionStorage.clear();
     } catch (e) {
         console.warn("Failed to clear session storage cache", e);
@@ -85,23 +86,80 @@ export class SharePointService {
   }
 
   private async _fetchSingleLibrary(web: any, siteUrl: string, libId: string, filterQuery: string): Promise<ILepineSearchResult[]> {
-    try {
-        const list = web.lists.getById(libId);
+    
+    // Standard fields usually available
+    const standardSelect = ["Id", "UniqueId", "FileLeafRef", "FileRef", "EncodedAbsUrl", "File_x0020_Type", "File/UniqueId", "TaxCatchAll/Term", "Modified", "Editor/Title", "File/Length"];
+    const standardExpand = ["File", "TaxCatchAll", "Editor"];
 
-        const [listEntity, items] = await Promise.all([
-            list.select("Drive/Id").expand("Drive").using(Caching({ store: "session" }))().catch(() => ({})),
+    // Combine with target fields
+    const enhancedSelect = [...standardSelect, ...TARGET_FIELDS];
+    const enhancedExpand = [...standardExpand, ...TARGET_FIELDS];
+
+    let items: any[] = [];
+    let driveId: string | undefined;
+    
+    const list = web.lists.getById(libId);
+
+    try {
+        // FIX: Revert to using .expand("Drive") which is standard and doesn't require extra modules.
+        // explicitly select Id and Drive/Id to ensure we get the object back.
+        const [listEntity, fetchedItems] = await Promise.all([
+            list.select("Id", "Drive/Id")
+                .expand("Drive")
+                .using(Caching({ store: "session" }))()
+                .catch((e: any) => {
+                    console.warn(`[LepineSearch] Could not fetch Drive ID for list ${libId}.`, e);
+                    return {}; 
+                }),
             
+            // Attempt to fetch items WITH custom columns
             list.items
                 .filter(filterQuery)
-                // FIX: Changed File_x0020_Size to File/Length
-                .select("Id", "UniqueId", "FileLeafRef", "FileRef", "EncodedAbsUrl", "File_x0020_Type", "File/UniqueId", "TaxCatchAll/Term", "Modified", "Editor/Title", "File/Length")
-                .expand("File", "TaxCatchAll", "Editor")
+                .select(...enhancedSelect)
+                .expand(...enhancedExpand)
                 .top(5000)
                 .using(Caching({ store: "session" }))()
+                .catch((e: any) => {
+                     throw e; 
+                })
         ]);
 
-        const driveId = listEntity.Drive?.Id;
+        items = fetchedItems;
+        // Robust check for Drive ID
+        if (listEntity && listEntity.Drive) {
+            driveId = listEntity.Drive.Id;
+        }
+        
+    } catch (enhancedError) {
+        console.warn(`[LepineSearch] Custom columns failed. Reverting to standard search. Error:`, enhancedError);
+        
+        try {
+            // RETRY: Fetch standard items + Drive ID
+            const [listEntity, fetchedItems] = await Promise.all([
+                list.select("Id", "Drive/Id")
+                    .expand("Drive")
+                    .using(Caching({ store: "session" }))()
+                    .catch((e: any) => ({})),
+                
+                list.items
+                    .filter(filterQuery)
+                    .select(...standardSelect)
+                    .expand(...standardExpand)
+                    .top(5000)
+                    .using(Caching({ store: "session" }))()
+            ]);
 
+            items = fetchedItems;
+             if (listEntity && listEntity.Drive) {
+                driveId = listEntity.Drive.Id;
+            }
+        } catch (fallbackError) {
+             console.error(`Library ${libId} completely failed query`, fallbackError);
+             return [];
+        }
+    }
+
+    try {
         return items.map((item: any) => {
             let fileType = item.File_x0020_Type;
             if (!fileType && item.FileLeafRef) {
@@ -113,24 +171,47 @@ export class SharePointService {
             const absUrl = item.EncodedAbsUrl || `${siteUrl}${item.FileRef}`;
             const fileGuid = item.File?.UniqueId; 
             
-            // Define video types
             const isVideo = ['mp4', 'mov', 'avi', 'wmv', 'mkv', 'webm'].indexOf(fileType) > -1;
             
             let thumbUrl = "";
 
-            if (driveId && fileGuid) {
-                // STRATEGY 1: Modern Drive API (Best for everything if Drive ID exists)
-                thumbUrl = `${siteUrl}/_api/v2.1/drives/${driveId}/items/${fileGuid}/thumbnails/0/large/content`;
-            } else {
-                // STRATEGY 2: Fallback Logic
-                if (isVideo && fileGuid) {
-                    // VIDEO-ONLY FIX: Use guidFile + clientType=modern to avoid 501 error
-                    thumbUrl = `${siteUrl}/_layouts/15/getpreview.ashx?guidFile=${fileGuid}&resolution=0&clientType=modern`;
+            // --- THUMBNAIL LOGIC ---
+            if (isVideo) {
+                // VIDEO STRATEGY: Strictly use the Drive API URL provided
+                if (driveId && fileGuid) {
+                    // Uses your specific requested pattern
+                    thumbUrl = `${siteUrl}/_api/v2.1/drives/${driveId}/items/${fileGuid}/thumbnails/0/c1920x1080/content?prefer=noRedirect,closestavailablesize,extendCacheMaxAge`;
                 } else {
-                    // STANDARD FALLBACK: Use 'path' for images/docs (keeps them working)
+                    thumbUrl = `${siteUrl}/_api/v2.1/drives/b!WJ6SQM8LyEqszLn8jcdz3nb0x0keJeBBk2lMbsSWdcnc1A2Il89dRK03-y0e4JrB/items/${fileGuid}/thumbnails/0/c1920x1080/content?prefer=noRedirect,closestavailablesize,extendCacheMaxAge`;
+                }
+            } else {
+                // IMAGE/OTHER STRATEGY: Use standard Drive API if available, else fallback
+                if (driveId && fileGuid) {
+                     thumbUrl = `${siteUrl}/_api/v2.1/drives/${driveId}/items/${fileGuid}/thumbnails/0/large/content`;
+                } else {
                     thumbUrl = `${siteUrl}/_layouts/15/getpreview.ashx?path=${encodeURIComponent(absUrl)}&resolution=0`;
                 }
             }
+
+            const groups: Record<string, string[]> = {};
+            
+            TARGET_FIELDS.forEach(field => {
+                const val = item[field];
+                if (val) {
+                    if (Array.isArray(val)) {
+                        groups[field] = val.map(v => {
+                            if (typeof v === 'object') return v.Label || v.Term || v.Title || "Unknown";
+                            return String(v);
+                        });
+                    } 
+                    else if (typeof val === 'object' && (val.Label || val.Term || val.Title)) {
+                        groups[field] = [val.Label || val.Term || val.Title];
+                    } 
+                    else {
+                         groups[field] = [String(val)];
+                    }
+                }
+            });
 
             return {
                 id: item.Id.toString(),
@@ -142,13 +223,10 @@ export class SharePointService {
                 tags: (item.TaxCatchAll && item.TaxCatchAll.length > 0) 
                     ? item.TaxCatchAll.map((t: any) => t.Term) 
                     : [],
-                
-                // Mappings
+                groupedTags: groups,
                 modified: item.Modified,
                 modifiedBy: item.Editor?.Title,
-                // FIX: Use File.Length for size
                 fileSize: item.File?.Length ? parseInt(item.File.Length) : 0,
-                
                 metadata: {},
                 parentLibraryId: libId,
                 parentSiteUrl: siteUrl
@@ -156,7 +234,7 @@ export class SharePointService {
         });
 
     } catch (error) {
-        console.warn(`Library ${libId} query failed in site ${siteUrl}`, error);
+        console.warn(`Error processing items for library ${libId}`, error);
         return [];
     }
   }
