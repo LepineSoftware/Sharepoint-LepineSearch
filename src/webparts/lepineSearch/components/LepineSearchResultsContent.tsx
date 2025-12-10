@@ -190,7 +190,7 @@ export default class LepineSearchResultsContent extends React.Component<IContent
     const hasPrev = selectedIndex > 0;
     const hasNext = selectedIndex < items.length - 1;
 
-    const pageSize = isCardView ? 12 : 25;
+    const pageSize = isCardView ? 15 : 25;
     const totalPages = Math.ceil(items.length / pageSize);
     const startIndex = (currentPage - 1) * pageSize;
     const currentItems = items.slice(startIndex, startIndex + pageSize);
