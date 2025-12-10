@@ -4,13 +4,39 @@ import { Stack, Text } from '@fluentui/react';
 
 interface ISearchBarProps {
   onSearch: (query: string) => void;
-  currentValue: string;
+  currentValue: string; // Passed from parent (debounced value usually, but here used for initial)
+}
+
+// Internal state to handle immediate UI updates while parent debounces
+interface ISearchBarState {
+  localValue: string;
 }
 
 const searchBoxStyles: Partial<ISearchBoxStyles> = { root: { width: '100%' } };
 
-export default class LepineSearchResultsSearchBar extends React.Component<ISearchBarProps, {}> {
+export default class LepineSearchResultsSearchBar extends React.Component<ISearchBarProps, ISearchBarState> {
   
+  constructor(props: ISearchBarProps) {
+    super(props);
+    this.state = {
+      localValue: props.currentValue || ''
+    };
+  }
+
+  // Sync state if parent updates query via presets or other means
+  public componentDidUpdate(prevProps: ISearchBarProps) {
+    if (prevProps.currentValue !== this.props.currentValue) {
+      this.setState({ localValue: this.props.currentValue });
+    }
+  }
+
+  private _onChange = (_: any, newValue?: string) => {
+    const val = newValue || '';
+    this.setState({ localValue: val });
+    // This triggers the parent's handler (which we will debounce in the parent)
+    this.props.onSearch(val);
+  }
+
   public render(): React.ReactElement<ISearchBarProps> {
     return (
       <Stack tokens={{ childrenGap: 5 }}>
@@ -19,18 +45,13 @@ export default class LepineSearchResultsSearchBar extends React.Component<ISearc
         </Text>
         <SearchBox
           placeholder="Search by filename..."
-          
-          // 1. Handles hitting "Enter" or clicking the search icon
           onSearch={(newValue) => this.props.onSearch(newValue)}
-          
-          // 2. Handles clicking the "X" to clear
-          onClear={() => this.props.onSearch('')}
-          
-          // 3. CRITICAL: Handles typing or deleting text (Live Filtering)
-          onChange={(_, newValue) => this.props.onSearch(newValue || '')}
-          
-          // Controlled component: value comes from parent state
-          value={this.props.currentValue}
+          onClear={() => {
+            this.setState({ localValue: '' });
+            this.props.onSearch('');
+          }}
+          onChange={this._onChange}
+          value={this.state.localValue}
           styles={searchBoxStyles}
         />
       </Stack>

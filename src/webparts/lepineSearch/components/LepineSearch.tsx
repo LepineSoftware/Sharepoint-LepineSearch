@@ -13,6 +13,8 @@ import {
   Dropdown,
   IDropdownOption
 } from '@fluentui/react';
+// Import debounce from lodash (ensure @types/lodash is installed for dev)
+import { debounce } from 'lodash'; 
 import { SharePointService } from '../services/SharePointService';
 import { ILepineSearchResult } from '../models/ISearchResult';
 import LepineSearchResultsSearchBar from './LepineSearchResultsSearchBar';
@@ -35,7 +37,7 @@ export interface ILepineSearchState {
   activeFileKind: string;
   isCardView: boolean;
   isFiltersOpen: boolean; 
-  sortOption: string; // NEW: State for sorting
+  sortOption: string;
 }
 
 const filterIcon: IIconProps = { iconName: 'Filter' };
@@ -49,7 +51,6 @@ const FILE_KINDS: Record<string, string[]> = {
     'Documents': ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'rtf', 'csv', 'one']
 };
 
-// NEW: Sort Options Definition
 const SORT_OPTIONS: IDropdownOption[] = [
     { key: 'dateNew', text: 'Newest to Oldest' },
     { key: 'dateOld', text: 'Oldest to Newest' },
@@ -61,6 +62,8 @@ const SORT_OPTIONS: IDropdownOption[] = [
 
 export default class LepineSearch extends React.Component<ILepineSearchProps, ILepineSearchState> {
   private _spService: SharePointService;
+  // Create a debounced version of the filter application
+  private _debouncedApplyFilters: () => void;
 
   constructor(props: ILepineSearchProps) {
     super(props);
@@ -74,9 +77,12 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
       activeFileKind: 'All', 
       isCardView: true,
       isFiltersOpen: false,
-      sortOption: 'dateNew' // Default sort
+      sortOption: 'dateNew' 
     };
     this._spService = new SharePointService(this.props.context);
+    
+    // Debounce the heavy filter operation by 300ms
+    this._debouncedApplyFilters = debounce(this._applyFilters.bind(this), 300);
   }
 
   public async componentDidMount() {
@@ -110,23 +116,28 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
       allItems: items,
       availableFilters: groupedFilters,
       isLoading: false
-    }, this._applyFilters); // Apply initial sort/filter
+    }, () => this._applyFilters()); 
   }
 
+  // This is called instantly by SearchBar
   private _handleSearch = (query: string) => {
-    this.setState({ searchQuery: query }, this._applyFilters);
+    // Update state immediately so UI (like clear button) reacts
+    this.setState({ searchQuery: query });
+    // Trigger the debounced filter logic
+    this._debouncedApplyFilters();
   }
 
+  // Filter changes don't need heavy debounce usually, but consistent behavior is fine
   private _handleFilterChange = (selectedTags: string[]) => {
     this.setState({ 
         selectedFilters: selectedTags,
         isFiltersOpen: false 
-    }, this._applyFilters);
+    }, () => this._applyFilters());
   }
 
   private _handleKindChange = (kind: string) => {
       const newKind = this.state.activeFileKind === kind ? 'All' : kind;
-      this.setState({ activeFileKind: newKind }, this._applyFilters);
+      this.setState({ activeFileKind: newKind }, () => this._applyFilters());
   }
 
   private _removeFilter = (tagToRemove: string) => {
@@ -135,7 +146,7 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
   }
 
   private _onSortChange = (event: React.FormEvent<HTMLDivElement>, item: IDropdownOption): void => {
-      this.setState({ sortOption: item.key as string }, this._applyFilters);
+      this.setState({ sortOption: item.key as string }, () => this._applyFilters());
   }
 
   private _applyFilters = () => {
@@ -146,7 +157,7 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
     if (searchQuery) {
       const lowerQuery = searchQuery.toLowerCase();
       result = result.filter(i => 
-        i.name.toLowerCase().includes(lowerQuery) || 
+        (i.name && i.name.toLowerCase().includes(lowerQuery)) || 
         (i.tags && i.tags.some(t => t.toLowerCase().includes(lowerQuery)))
       );
     }
@@ -176,9 +187,9 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
     result.sort((a, b) => {
         switch (sortOption) {
             case 'nameAsc':
-                return a.name.localeCompare(b.name);
+                return (a.name || '').localeCompare(b.name || '');
             case 'nameDesc':
-                return b.name.localeCompare(a.name);
+                return (b.name || '').localeCompare(a.name || '');
             case 'dateNew':
                 return (new Date(b.modified || 0).getTime()) - (new Date(a.modified || 0).getTime());
             case 'dateOld':
@@ -215,7 +226,7 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
         }
     });
 
-    const showEmptyState = !isLoading && filteredItems.length === 0 && activeFileKind !== 'All';
+    const showEmptyState = !isLoading && filteredItems.length === 0;
 
     return (
       <Stack tokens={{ childrenGap: 20 }} style={{ padding: 20, minHeight: '400px' }}>
@@ -263,7 +274,7 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
                 {/* Controls Bar */}
                 <Stack horizontal horizontalAlign="space-between" verticalAlign="center" styles={{root: { borderBottom: '1px solid #eee', paddingBottom: 10, marginTop: 10}}}>
                     <Text variant="small" styles={{ root: { fontWeight: '600' } }}>
-                        Found {filteredItems.length} results
+                        {isLoading ? 'Searching...' : `Found ${filteredItems.length} results`}
                     </Text>
                     
                     <Stack horizontal tokens={{ childrenGap: 15 }} verticalAlign="center">
@@ -271,7 +282,7 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
                             selectedKey={sortOption}
                             options={SORT_OPTIONS}
                             onChange={this._onSortChange}
-                            styles={{ root: { width: 160 }, dropdown: { border: 'none' } }} // Minimalist style
+                            styles={{ root: { width: 160 }, dropdown: { border: 'none' } }} 
                         />
 
                         <Toggle 
@@ -314,7 +325,7 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
                     <Stack horizontalAlign="center" tokens={{ childrenGap: 20 }} styles={{ root: { paddingBottom: 40 } }}>
                         <Icon iconName="SearchIssue" styles={{ root: { fontSize: 48, color: '#c8c8c8', marginTop: 25 } }} />
                         <Text variant="large" styles={{ root: { color: '#666' } }}>
-                            There are no results for this file kind
+                            No items match your search.
                         </Text>
                     </Stack>
                 ) : (
@@ -322,7 +333,7 @@ export default class LepineSearch extends React.Component<ILepineSearchProps, IL
                         items={filteredItems} 
                         isLoading={this.state.isLoading}
                         isCardView={isCardView}
-                        searchQuery={this.state.searchQuery} // <--- NEW: Passed prop
+                        searchQuery={this.state.searchQuery}
                     />
                 )}
             </Stack>

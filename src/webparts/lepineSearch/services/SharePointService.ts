@@ -8,7 +8,6 @@ import "@pnp/sp/items";
 import "@pnp/sp/search";
 import "@pnp/sp/files";
 import "@pnp/sp/folders";
-// REMOVED: import "@pnp/sp/drives"; (This caused the build error)
 import { ILepineSearchResult } from "../models/ISearchResult";
 
 // CONFIGURATION: Add your specific Managed Metadata Column Internal Names here
@@ -101,8 +100,6 @@ export class SharePointService {
     const list = web.lists.getById(libId);
 
     try {
-        // FIX: Revert to using .expand("Drive") which is standard and doesn't require extra modules.
-        // explicitly select Id and Drive/Id to ensure we get the object back.
         const [listEntity, fetchedItems] = await Promise.all([
             list.select("Id", "Drive/Id")
                 .expand("Drive")
@@ -112,20 +109,15 @@ export class SharePointService {
                     return {}; 
                 }),
             
-            // Attempt to fetch items WITH custom columns
             list.items
                 .filter(filterQuery)
                 .select(...enhancedSelect)
                 .expand(...enhancedExpand)
                 .top(5000)
                 .using(Caching({ store: "session" }))()
-                .catch((e: any) => {
-                     throw e; 
-                })
         ]);
 
         items = fetchedItems;
-        // Robust check for Drive ID
         if (listEntity && listEntity.Drive) {
             driveId = listEntity.Drive.Id;
         }
@@ -175,20 +167,19 @@ export class SharePointService {
             
             let thumbUrl = "";
 
-            // --- THUMBNAIL LOGIC ---
-            if (isVideo) {
-                // VIDEO STRATEGY: Strictly use the Drive API URL provided
-                if (driveId && fileGuid) {
-                    // Uses your specific requested pattern
+            // --- IMPROVED THUMBNAIL LOGIC ---
+            if (driveId && fileGuid) {
+                if (isVideo) {
                     thumbUrl = `${siteUrl}/_api/v2.1/drives/${driveId}/items/${fileGuid}/thumbnails/0/c1920x1080/content?prefer=noRedirect,closestavailablesize,extendCacheMaxAge`;
                 } else {
-                    thumbUrl = `${siteUrl}/_api/v2.1/drives/b!WJ6SQM8LyEqszLn8jcdz3nb0x0keJeBBk2lMbsSWdcnc1A2Il89dRK03-y0e4JrB/items/${fileGuid}/thumbnails/0/c1920x1080/content?prefer=noRedirect,closestavailablesize,extendCacheMaxAge`;
+                    thumbUrl = `${siteUrl}/_api/v2.1/drives/${driveId}/items/${fileGuid}/thumbnails/0/large/content`;
                 }
             } else {
-                // IMAGE/OTHER STRATEGY: Use standard Drive API if available, else fallback
-                if (driveId && fileGuid) {
-                     thumbUrl = `${siteUrl}/_api/v2.1/drives/${driveId}/items/${fileGuid}/thumbnails/0/large/content`;
+                if (isVideo && fileGuid) {
+                    // Refactored fallback for videos to use VideoService
+                    thumbUrl = `${siteUrl}/_api/VideoService/Channels('${libId}')/Videos('${fileGuid}')/ThumbnailStream`;
                 } else {
+                    // Fallback using legacy GetPreview
                     thumbUrl = `${siteUrl}/_layouts/15/getpreview.ashx?path=${encodeURIComponent(absUrl)}&resolution=0`;
                 }
             }
