@@ -73,7 +73,12 @@ export default class LepineSearchResultsContent extends React.Component<IContent
     }
   }
 
-  private _onItemClick = (item: ILepineSearchResult) => {
+  // UPDATED: Added event handling to prevent scroll jumps
+  private _onItemClick = (item: ILepineSearchResult, ev?: React.SyntheticEvent<HTMLElement>) => {
+    if (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
     this.setState({ selectedItem: item });
   }
 
@@ -121,7 +126,8 @@ export default class LepineSearchResultsContent extends React.Component<IContent
     {
       key: 'name', name: 'Name', fieldName: 'name', minWidth: 150, maxWidth: 300, isResizable: true,
       onRender: (item: ILepineSearchResult) => (
-        <Link onClick={() => this._onItemClick(item)}>
+        // UPDATED: Pass event to _onItemClick
+        <Link onClick={(ev) => this._onItemClick(item, ev)}>
            <HighlightText text={item.name} query={this.props.searchQuery} />
         </Link>
       )
@@ -226,7 +232,8 @@ export default class LepineSearchResultsContent extends React.Component<IContent
                 return (
                   <DocumentCard 
                     key={item.id} 
-                    onClick={() => this._onItemClick(item)}
+                    // UPDATED: Pass event to _onItemClick
+                    onClick={(ev) => this._onItemClick(item, ev)}
                     styles={{ root: { width: '100%', height: '100%', minWidth: 'auto', cursor: 'pointer' } }}
                   >
                     <div style={previewContainerStyle}>
@@ -368,7 +375,7 @@ export default class LepineSearchResultsContent extends React.Component<IContent
                         <Text>{selectedItem.modifiedBy || 'Unknown'}</Text>
                     </div>
 
-                    {/* MOVED BUTTONS HERE */}
+                    {/* BUTTONS */}
                     <Stack tokens={{ childrenGap: 10 }} styles={{ root: { marginTop: 10 } }}>
                         <PrimaryButton 
                             text="Open in SharePoint" 
